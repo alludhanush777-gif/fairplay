@@ -1,71 +1,49 @@
 import React, { useState } from 'react';
 import { Calendar, Users, Activity, Play, Plus, Clock, Search, ChevronRight } from 'lucide-react';
+import usePlayerStore from '../store/playerStore';
 
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('overview');
 
-    // Form State
-    const [formData, setFormData] = useState({
-        playerId: 'FP-0042',
-        hydrationLevel: '',
-        oxygenIntake: '',
-        heartRate: '',
-        recoveryPercentage: '',
-        topSpeed: '',
-        agilityScore: '',
-        balanceScore: ''
-    });
+    const players = usePlayerStore((state) => state.players);
+    const selectedPlayerId = usePlayerStore((state) => state.selectedPlayerId);
+    const setSelectedPlayerId = usePlayerStore((state) => state.setSelectedPlayerId);
+    const updatePlayerMetrics = usePlayerStore((state) => state.updatePlayerMetrics);
+
+    const activePlayer = players.find(p => p.id === selectedPlayerId) || players[0];
 
     const [statusMessage, setStatusMessage] = useState({ text: '', type: '' });
 
     const handleInputChange = (e) => {
-        setFormData({
-            ...formData,
-            [e.target.name]: e.target.value
+        const val = e.target.value;
+        const numVal = val === '' ? '' : Number(val);
+
+        if (e.target.name === 'playerId') {
+            setSelectedPlayerId(val);
+            return;
+        }
+
+        const fieldMap = {
+            hydrationLevel: 'hydration',
+            oxygenIntake: 'o2',
+            heartRate: 'hr',
+            recoveryPercentage: 'recovery',
+            topSpeed: 'topSpeed',
+            agilityScore: 'agility',
+            balanceScore: 'balance'
+        };
+
+        const storeField = fieldMap[e.target.name] || e.target.name;
+
+        updatePlayerMetrics(selectedPlayerId, {
+            [storeField]: numVal
         });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setStatusMessage({ text: 'Submitting...', type: 'info' });
-
-        try {
-            const payload = {
-                playerId: formData.playerId,
-                biofeedback: {
-                    hydrationLevel: Number(formData.hydrationLevel) || 100,
-                    oxygenIntake: Number(formData.oxygenIntake) || 95,
-                    heartRate: Number(formData.heartRate) || 60
-                },
-                performance: {
-                    recoveryPercentage: Number(formData.recoveryPercentage) || 100,
-                    topSpeed: Number(formData.topSpeed) || 0,
-                    agilityScore: Number(formData.agilityScore) || 50,
-                    balanceScore: Number(formData.balanceScore) || 50
-                }
-            };
-
-            const response = await fetch('http://localhost:5000/api/players/metrics', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                setStatusMessage({ text: 'Metrics updated successfully!', type: 'success' });
-                // Reset form optionally
-                setFormData({ ...formData, hydrationLevel: '', oxygenIntake: '', heartRate: '', recoveryPercentage: '', topSpeed: '', agilityScore: '', balanceScore: '' });
-            } else {
-                setStatusMessage({ text: `Failed: ${result.message}`, type: 'error' });
-            }
-        } catch (error) {
-            console.error(error);
-            setStatusMessage({ text: 'Network connection error. Is backend running on :5000?', type: 'error' });
-        }
+        setStatusMessage({ text: 'Metrics updated in real-time!', type: 'success' });
+        setTimeout(() => setStatusMessage({ text: '', type: '' }), 3000);
     };
 
     // Placeholder data for the schedule grid
@@ -117,13 +95,13 @@ const AdminDashboard = () => {
                                 <label className="block text-sm font-medium text-gray-400 mb-1">Select Player</label>
                                 <select
                                     name="playerId"
-                                    value={formData.playerId}
+                                    value={selectedPlayerId}
                                     onChange={handleInputChange}
                                     className="w-full bg-[#0B1320] border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-[#FF5722]"
                                 >
-                                    <option value="FP-0042">Alex Mercer - ID: #0042</option>
-                                    <option value="FP-0089">Jordan Lee - ID: #0089</option>
-                                    <option value="FP-0124">Sam Taylor - ID: #0124</option>
+                                    {players.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name} - ID: {p.id}</option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -136,16 +114,16 @@ const AdminDashboard = () => {
                                             <label className="text-sm text-gray-300">Hydration Level</label>
                                             <span className="text-xs text-gray-500 font-mono">0-100%</span>
                                         </div>
-                                        <input type="number" name="hydrationLevel" value={formData.hydrationLevel} onChange={handleInputChange} placeholder="e.g. 92" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#00E5FF] focus:outline-none" />
+                                        <input type="number" name="hydrationLevel" value={activePlayer?.hydration || ''} onChange={handleInputChange} placeholder="e.g. 92" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#00E5FF] focus:outline-none" />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm text-gray-300 mb-1">O2 Intake</label>
-                                            <input type="number" name="oxygenIntake" value={formData.oxygenIntake} onChange={handleInputChange} placeholder="%" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#00E5FF] focus:outline-none" />
+                                            <input type="number" name="oxygenIntake" value={activePlayer?.o2 || ''} onChange={handleInputChange} placeholder="%" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#00E5FF] focus:outline-none" />
                                         </div>
                                         <div>
                                             <label className="block text-sm text-gray-300 mb-1">Heart Rate (Avg)</label>
-                                            <input type="number" name="heartRate" value={formData.heartRate} onChange={handleInputChange} placeholder="BPM" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#00E5FF] focus:outline-none" />
+                                            <input type="number" name="heartRate" value={activePlayer?.hr || ''} onChange={handleInputChange} placeholder="BPM" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#00E5FF] focus:outline-none" />
                                         </div>
                                     </div>
                                 </div>
@@ -157,19 +135,19 @@ const AdminDashboard = () => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm text-gray-300 mb-1">Recovery %</label>
-                                        <input type="number" name="recoveryPercentage" value={formData.recoveryPercentage} onChange={handleInputChange} placeholder="100" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
+                                        <input type="number" name="recoveryPercentage" value={activePlayer?.recovery || ''} onChange={handleInputChange} placeholder="100" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
                                     </div>
                                     <div>
                                         <label className="block text-sm text-gray-300 mb-1">Top Speed</label>
-                                        <input type="number" name="topSpeed" value={formData.topSpeed} onChange={handleInputChange} placeholder="km/h" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
+                                        <input type="number" name="topSpeed" value={activePlayer?.topSpeed || ''} onChange={handleInputChange} placeholder="km/h" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
                                     </div>
                                     <div>
-                                        <label className="block text-sm text-gray-300 mb-1">Agility (1-10)</label>
-                                        <input type="number" name="agilityScore" value={formData.agilityScore} onChange={handleInputChange} placeholder="10" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
+                                        <label className="block text-sm text-gray-300 mb-1">Agility (1-100)</label>
+                                        <input type="number" name="agilityScore" value={activePlayer?.agility || ''} onChange={handleInputChange} placeholder="50" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
                                     </div>
                                     <div>
-                                        <label className="block text-sm text-gray-300 mb-1">Balance (1-10)</label>
-                                        <input type="number" name="balanceScore" value={formData.balanceScore} onChange={handleInputChange} placeholder="10" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
+                                        <label className="block text-sm text-gray-300 mb-1">Balance (1-100)</label>
+                                        <input type="number" name="balanceScore" value={activePlayer?.balance || ''} onChange={handleInputChange} placeholder="50" required className="w-full bg-[#111827] border border-gray-700 rounded p-2 text-white font-mono focus:border-[#FF5722] focus:outline-none" />
                                     </div>
                                 </div>
                             </div>
@@ -193,7 +171,7 @@ const AdminDashboard = () => {
                     <div className="grid grid-cols-3 gap-4">
                         <div className="bg-[#111827]/80 rounded-xl p-5 border border-gray-800 border-l-4 border-l-[#FF5722]">
                             <h4 className="text-gray-400 text-sm font-medium">Active Players</h4>
-                            <p className="text-3xl font-bold font-mono mt-1 text-white">142</p>
+                            <p className="text-3xl font-bold font-mono mt-1 text-white">{players.length}</p>
                         </div>
                         <div className="bg-[#111827]/80 rounded-xl p-5 border border-gray-800 border-l-4 border-l-[#00E5FF]">
                             <h4 className="text-gray-400 text-sm font-medium">Avg Optimal Readiness</h4>

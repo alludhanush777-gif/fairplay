@@ -2,8 +2,9 @@ import React, { useState, useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Environment, Sphere, Cylinder, Html, Sparkles } from '@react-three/drei';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, Activity, Droplets, Shield, HeartPulse, UserCircle2, Settings } from 'lucide-react';
+import { Plus, X, Activity, Droplets, Shield, HeartPulse, UserCircle2, Settings, User, ActivitySquare } from 'lucide-react';
 import * as THREE from 'three';
+import usePlayerStore from '../store/playerStore';
 
 // --- 3D Components ---
 
@@ -17,17 +18,30 @@ const StylizedHuman = ({ player }) => {
     const chestRef = useRef();
     const leftLegRef = useRef();
     const rightLegRef = useRef();
+    const highlightedPart = usePlayerStore((state) => state.highlightedPart);
 
     // Derived colors and values
+    const isGlitching = player.o2 < 80 || player.recovery < 40;
     const hrScale = player.hr / 60; // baseline 60bpm -> 1x pulse
-    const recoveryColor = player.recovery >= 80 ? '#00F0FF' : player.recovery >= 50 ? '#FF4D00' : '#FF0000';
+    const recoveryPulse = Math.sin(Date.now() / 200) * 0.5 + 0.5; // for pulsing effect
+    const baseRecoveryColor = player.recovery >= 60 ? '#00F0FF' : '#FF4D00';
+    const recoveryColor = player.recovery < 60 ? new THREE.Color('#FF4D00').lerp(new THREE.Color('#FF0000'), recoveryPulse).getHexString() : '00F0FF';
+
     const balanceColor = player.balance >= 70 ? '#00FF00' : player.balance >= 40 ? '#FFaa00' : '#FF0000';
     const hydrationOpacity = Math.max(0.1, player.hydration / 100);
 
     useFrame((state, delta) => {
         if (groupRef.current) {
             // Idle rotation or breathing motion
-            groupRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.05;
+            groupRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.05 - 1.5;
+
+            if (isGlitching) {
+                groupRef.current.position.x = (Math.random() - 0.5) * 0.08;
+                groupRef.current.position.z = (Math.random() - 0.5) * 0.08;
+            } else {
+                groupRef.current.position.x = 0;
+                groupRef.current.position.z = 0;
+            }
         }
         if (chestRef.current) {
             // Heartbeat scale pulse
@@ -41,8 +55,8 @@ const StylizedHuman = ({ player }) => {
     });
 
     const bodyMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: recoveryColor,
-        emissive: recoveryColor,
+        color: `#${recoveryColor}`,
+        emissive: `#${recoveryColor}`,
         emissiveIntensity: 0.4,
         wireframe: true,
         transparent: true,
@@ -76,7 +90,12 @@ const StylizedHuman = ({ player }) => {
             {/* Glowing Heart/Chest Node */}
             <mesh ref={chestRef} position={[0, 2.2, 0.1]}>
                 <sphereGeometry args={[0.2, 16, 16]} />
-                <meshStandardMaterial color="#FF4D00" emissive="#FF4D00" emissiveIntensity={2} toneMapped={false} />
+                <meshStandardMaterial
+                    color={highlightedPart === 'chest' ? '#FFFFFF' : '#FF4D00'}
+                    emissive={highlightedPart === 'chest' ? '#FFFFFF' : '#FF4D00'}
+                    emissiveIntensity={highlightedPart === 'chest' ? 5 : 2}
+                    toneMapped={false}
+                />
                 <Html position={[-0.5, 0, 0.2]} center className="pointer-events-none">
                     <div className="bg-black/80 backdrop-blur-md border border-[#FF4D00]/30 text-[#FF4D00] text-[10px] px-2 py-1 rounded-full whitespace-nowrap drop-shadow-[0_0_10px_#FF4D00] hidden md:block">
                         HR {player.hr} bpm
@@ -87,22 +106,29 @@ const StylizedHuman = ({ player }) => {
             {/* Arms */}
             <mesh position={[-0.8, 1.8, 0]} rotation={[0, 0, 0.2]} material={bodyMaterial}>
                 <cylinderGeometry args={[0.15, 0.1, 1.2, 8, 1, true]} />
+                <Html position={[-0.4, 0, 0]} center className="pointer-events-none">
+                    <div className="bg-black/60 backdrop-blur-md border border-white/20 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap shadow-xl">
+                        Agility {player.agility}%
+                    </div>
+                </Html>
             </mesh>
             <mesh position={[0.8, 1.8, 0]} rotation={[0, 0, -0.2]} material={bodyMaterial}>
                 <cylinderGeometry args={[0.15, 0.1, 1.2, 8, 1, true]} />
             </mesh>
 
             {/* Legs */}
-            <mesh ref={leftLegRef} position={[-0.3, 0.5, 0]} rotation={[0, 0, -0.05]} material={legMaterial}>
+            <mesh ref={leftLegRef} position={[-0.3, 0.5, 0]} rotation={[0, 0, -0.05]}>
                 <cylinderGeometry args={[0.2, 0.15, 1.6, 8, 1, true]} />
-                <Html position={[-0.4, -0.2, 0]} center className="pointer-events-none">
-                    <div className="bg-black/80 backdrop-blur-md border border-white/20 text-white text-[10px] px-2 py-1 rounded-full whitespace-nowrap hidden md:block" style={{ borderColor: balanceColor, color: balanceColor }}>
+                <meshStandardMaterial color={highlightedPart === 'legs' ? '#FFFFFF' : balanceColor} emissive={highlightedPart === 'legs' ? '#FFFFFF' : balanceColor} emissiveIntensity={highlightedPart === 'legs' ? 2 : 0.6} wireframe={true} />
+                <Html position={[-0.5, -0.4, 0]} center className="pointer-events-none">
+                    <div className="bg-black/60 backdrop-blur-md border border-white/20 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap shadow-xl" style={{ borderColor: balanceColor }}>
                         Balance {player.balance}%
                     </div>
                 </Html>
             </mesh>
-            <mesh ref={rightLegRef} position={[0.3, 0.5, 0]} rotation={[0, 0, 0.05]} material={legMaterial}>
+            <mesh ref={rightLegRef} position={[0.3, 0.5, 0]} rotation={[0, 0, 0.05]}>
                 <cylinderGeometry args={[0.2, 0.15, 1.6, 8, 1, true]} />
+                <meshStandardMaterial color={highlightedPart === 'legs' ? '#FFFFFF' : balanceColor} emissive={highlightedPart === 'legs' ? '#FFFFFF' : balanceColor} emissiveIntensity={highlightedPart === 'legs' ? 2 : 0.6} wireframe={true} />
             </mesh>
 
             {/* Hydration Particles (Flowing through body) */}
@@ -127,8 +153,8 @@ const ScanningLine = () => {
 
     useFrame((state) => {
         if (lineRef.current) {
-            // Loop from -0.5 to 3.5 over 4 seconds
-            const t = (state.clock.elapsedTime % 4) / 4;
+            // Ping-pong from -0.5 to 3.5
+            const t = (Math.sin(state.clock.elapsedTime * 2) + 1) / 2;
             const yPos = -0.5 + (t * 4.0);
             lineRef.current.position.y = yPos;
         }
@@ -137,7 +163,7 @@ const ScanningLine = () => {
     return (
         <mesh ref={lineRef} position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <ringGeometry args={[0.0, 1.5, 32]} />
-            <meshBasicMaterial color="#00F0FF" transparent opacity={0.3} side={THREE.DoubleSide} />
+            <meshBasicMaterial color="#00F0FF" transparent opacity={0.6} side={THREE.DoubleSide} />
         </mesh>
     );
 };
@@ -172,12 +198,14 @@ const FormSlider = ({ label, value, onChange, min = 0, max = 100, unit = "%", co
 
 
 export default function DigitalTwinProfile() {
-    // 1. Data State
-    const [players, setPlayers] = useState([
-        { id: '#0042', name: 'Alex Mercer', hr: 72, recovery: 100, hydration: 92, balance: 85 },
-        { id: '#0089', name: 'Jordan Lee', hr: 135, recovery: 55, hydration: 70, balance: 90 },
-    ]);
-    const [selectedPlayer, setSelectedPlayer] = useState(players[0]);
+    // 1. Data State is now Global
+    const players = usePlayerStore((state) => state.players);
+    const selectedPlayerId = usePlayerStore((state) => state.selectedPlayerId);
+    const setSelectedPlayerId = usePlayerStore((state) => state.setSelectedPlayerId);
+    const addPlayer = usePlayerStore((state) => state.addPlayer);
+    const updatePlayerMetrics = usePlayerStore((state) => state.updatePlayerMetrics);
+
+    const selectedPlayer = players.find(p => p.id === selectedPlayerId) || players[0];
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -186,13 +214,11 @@ export default function DigitalTwinProfile() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handlePlayerSelect = (player) => {
-        setSelectedPlayer(player);
+        setSelectedPlayerId(player.id);
     };
 
     const handleMetricChange = (field, value) => {
-        const updatedPlayer = { ...selectedPlayer, [field]: value };
-        setSelectedPlayer(updatedPlayer);
-        setPlayers(players.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
+        updatePlayerMetrics(selectedPlayer.id, { [field]: value });
     };
 
     const handleAddPlayerSubmit = (e) => {
@@ -210,11 +236,12 @@ export default function DigitalTwinProfile() {
                 hr: newPlayerForm.hr,
                 recovery: newPlayerForm.recovery,
                 hydration: newPlayerForm.hydration,
-                balance: newPlayerForm.balance
+                balance: newPlayerForm.balance,
+                o2: 98,
+                topSpeed: 25,
+                agility: 75
             };
-            const updatedPlayers = [...players, newPlayer];
-            setPlayers(updatedPlayers);
-            setSelectedPlayer(newPlayer);
+            addPlayer(newPlayer);
             setNewPlayerForm({ name: '', hr: 80, recovery: 100, hydration: 100, balance: 100 });
             setIsSubmitting(false);
             setIsModalOpen(false);
@@ -223,9 +250,10 @@ export default function DigitalTwinProfile() {
     };
 
     return (
-        <div className="relative w-full h-screen bg-gradient-to-b from-[#0A0F1E] to-[#000000] overflow-hidden text-white font-sans selection:bg-[#FF4D00] selection:text-white flex flex-col md:flex-row">
+        <div className="relative w-full h-screen bg-slate-950 overflow-hidden text-white font-sans selection:bg-[#FF4D00] selection:text-white flex flex-col md:flex-row">
 
             {/* Ambient Background Elements */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_70%)] pointer-events-none" />
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#00F0FF]/5 blur-[120px] rounded-full pointer-events-none" />
             <div className="absolute bottom-[-20%] right-[-10%] w-[40%] h-[40%] bg-[#FF4D00]/10 blur-[150px] rounded-full pointer-events-none" />
 
@@ -261,8 +289,8 @@ export default function DigitalTwinProfile() {
                                     key={p.id}
                                     onClick={() => handlePlayerSelect(p)}
                                     className={`w-full text-left p-3 rounded-xl border transition-all duration-300 flex items-center justify-between group ${selectedPlayer?.id === p.id
-                                            ? 'bg-[#FF4D00]/10 border-[#FF4D00]/50 shadow-[0_0_15px_rgba(255,77,0,0.15)]'
-                                            : 'bg-black/30 border-white/5 hover:bg-white/5 hover:border-white/10'
+                                        ? 'bg-[#FF4D00]/10 border-[#FF4D00]/50 shadow-[0_0_15px_rgba(255,77,0,0.15)]'
+                                        : 'bg-black/30 border-white/5 hover:bg-white/5 hover:border-white/10'
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">

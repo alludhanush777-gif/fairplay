@@ -5,6 +5,7 @@ import VitalityLanding from './components/VitalityLanding';
 import AuthPage from './components/AuthPage';
 import GymAuthPage from './components/GymAuthPage';
 import StreakDashboard from './components/StreakDashboard';
+import AICoach from './components/AICoach';
 import { Layers, Monitor, Activity, ShieldCheck, Dumbbell, Flame } from 'lucide-react';
 
 function App() {
@@ -67,6 +68,9 @@ function App() {
                 {view === 'auth-gym' && <GymAuthPage onLogin={() => setView('streak')} />}
                 {view === 'streak' && <StreakDashboard />}
             </div>
+
+            {/* AI Coach Overlay Component */}
+            <AICoach />
         </div>
     );
 }
