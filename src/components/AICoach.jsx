@@ -1,61 +1,51 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Brain, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Brain, Volume2, X, ChevronRight, Activity, Shield, Layout, UserPlus, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import usePlayerStore, { speakAlert } from '../store/playerStore';
 
-// Note: In a real app, inject this via process.env.VITE_OPENAI_API_KEY
 const OPENAI_API_KEY = '';
 
 export default function AICoach() {
     const [isListening, setIsListening] = useState(false);
-    const [transcript, setTranscript] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [showChat, setShowChat] = useState(false);
+    const [showSidebar, setShowSidebar] = useState(false);
     const [chatHistory, setChatHistory] = useState([]);
-
-    const recognitionRef = useRef(null);
     const [error, setError] = useState('');
 
+    const recognitionRef = useRef(null);
+    const scrollRef = useRef(null);
+
+    // Sync scroll to bottom
     useEffect(() => {
-        // Initialize Speech Recognition
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [chatHistory, isProcessing]);
+
+    useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognitionRef.current = new SpeechRecognition();
             recognitionRef.current.continuous = false;
             recognitionRef.current.interimResults = false;
-            recognitionRef.current.lang = 'en-US';
-
-            recognitionRef.current.onresult = (event) => {
-                const text = event.results[0][0].transcript;
-                setTranscript(text);
-                handleVoiceCommand(text);
-            };
-
-            recognitionRef.current.onerror = (event) => {
-                console.error("Speech recognition error", event.error);
+            recognitionRef.current.onresult = (e) => handleVoiceCommand(e.results[0][0].transcript);
+            recognitionRef.current.onerror = (e) => {
                 setIsListening(false);
-                setError('Microphone error: ' + event.error);
+                setError('Mic error: ' + e.error);
                 setTimeout(() => setError(''), 3000);
             };
-
-            recognitionRef.current.onend = () => {
-                setIsListening(false);
-            };
-        } else {
-            console.warn("Speech recognition not supported in this browser.");
-            setError('Speech recognition not supported.');
+            recognitionRef.current.onend = () => setIsListening(false);
         }
-    }, []); // Empty dependency array prevents recreation and infinite loops!
+    }, []);
 
     const toggleListen = () => {
         if (isListening) {
             recognitionRef.current?.stop();
-            setIsListening(false);
         } else {
-            setTranscript('');
             setError('');
             recognitionRef.current?.start();
             setIsListening(true);
+            setShowSidebar(true);
         }
     };
 
@@ -63,222 +53,230 @@ export default function AICoach() {
         setChatHistory(prev => [...prev, { role, content, time: new Date().toLocaleTimeString() }]);
     };
 
-    const executeJSONCommand = (actionBlock) => {
+    const executeAction = (action, data) => {
         const store = usePlayerStore.getState();
-        try {
-            const cmd = JSON.parse(actionBlock);
-            if (cmd.action === 'ADD_PLAYER' && cmd.data) {
-                // generate random ID
+        switch (action) {
+            case 'CHANGE_VIEW':
+                store.setView(data.view.toLowerCase());
+                return `Switching dashboard to ${data.view} view.`;
+            case 'ADD_PLAYER':
                 const id = `#${Math.floor(1000 + Math.random() * 9000)}`;
-                store.addPlayer({ ...cmd.data, id, o2: 95, topSpeed: 0, agility: 50 });
-                return true;
-            } else if (cmd.action === 'UPDATE_METRIC' && cmd.data) {
-                store.updatePlayerMetrics(cmd.data.playerId, { [cmd.data.metric]: cmd.data.value });
-                return true;
-            } else if (cmd.action === 'SELECT_PLAYER' && cmd.data) {
-                store.setSelectedPlayerId(cmd.data.playerId);
-                return true;
-            } else if (cmd.action === 'HIGHLIGHT_BODY_PART' && cmd.data) {
-                store.setHighlightedPart(cmd.data.part);
+                store.addPlayer({ ...data, id, o2: 95, topSpeed: 25, agility: 70 });
+                return `Successfully initialized ${data.name} to the roster.`;
+            case 'SELECT_PLAYER':
+                store.setSelectedPlayerId(data.playerId);
+                return `Selecting subject ${data.playerId}.`;
+            case 'UPDATE_METRIC':
+                store.updatePlayerMetrics(data.playerId, { [data.metric]: data.value });
+                return `Updated ${data.metric} to ${data.value}.`;
+            case 'HIGHLIGHT_PART':
+                store.setHighlightedPart(data.part);
                 setTimeout(() => store.setHighlightedPart(null), 5000);
-                return true;
-            }
-        } catch (e) {
-            console.error("Failed to parse AI command", e);
+                return `Highlighting ${data.part} on the digital twin.`;
+            default: return null;
         }
-        return false;
     };
 
     const handleVoiceCommand = async (text) => {
         setIsProcessing(true);
         addChatMessage('user', text);
 
-        // Fetch the very latest state on demand
         const store = usePlayerStore.getState();
         const selectedPlayer = store.players.find(p => p.id === store.selectedPlayerId) || store.players[0];
 
         if (OPENAI_API_KEY) {
-            // Real LLM Integration
             try {
                 const systemPrompt = `
-You are the FairPlay AI Coach, an expert sports scientist and assistant. Your personality is supportive, knowledgeable, and slightly enthusiastic.
-You have access to the current dashboard state:
-- Selected Player: ${selectedPlayer.name} (ID: ${selectedPlayer.id}) with metrics:
-  - Heart Rate: ${selectedPlayer.hr} bpm
-  - Recovery: ${selectedPlayer.recovery}%
-  - Hydration: ${selectedPlayer.hydration}%
-  - Balance: ${selectedPlayer.balance}%
+You are the FairPlay Master Intelligence. You are the nervous system of the FairPlay platform.
+KNOWLEDGE BASE:
+- PURPOSE: FairPlay is a high-performance Command Center for athlete analytics.
+- MODULES: 'Streak Dashboard' (consistency), 'Admin Panel' (metrics input), '3D Biometric Viewer' (real-time visualization).
+- DATA: Active subject is ${selectedPlayer.name} (ID: ${selectedPlayer.id}) with HR ${selectedPlayer.hr}, Recovery ${selectedPlayer.recovery}%.
 
-You can perform actions by responding with ONLY a JSON block like:
-{"action": "UPDATE_METRIC", "data": {"playerId": "${selectedPlayer.id}", "metric": "hr", "value": 140}}
-or {"action": "HIGHLIGHT_BODY_PART", "data": {"part": "chest"}}
+REACTION TOOLS (JSON ONLY):
+{"action": "CHANGE_VIEW", "data": {"view": "admin" | "viewer" | "streak"}}
+{"action": "ADD_PLAYER", "data": {"name": "...", "hr": 80, "recovery": 100}}
+{"action": "HIGHLIGHT_PART", "data": {"part": "chest" | "legs"}}
 
-Answer conversationally if it's a question. If a command, output the JSON block and a conversational confirmation.
+If a command is detected, output the JSON block and a short confirmation. If it's a question, answer with Master Intelligence authority.
 `;
                 const response = await fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
                     body: JSON.stringify({
                         model: 'gpt-4o',
-                        messages: [
-                            { role: 'system', content: systemPrompt },
-                            { role: 'user', content: text }
-                        ]
+                        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }]
                     })
                 });
                 const data = await response.json();
-                const aiMsg = data.choices[0].message.content;
-
-                // Extract JSON if present
+                let aiMsg = data.choices[0].message.content;
                 const jsonMatch = aiMsg.match(/\{[\s\S]*\}/);
-                let spokenText = aiMsg;
                 if (jsonMatch) {
-                    executeJSONCommand(jsonMatch[0]);
-                    spokenText = aiMsg.replace(jsonMatch[0], '').trim();
+                    const cmd = JSON.parse(jsonMatch[0]);
+                    executeAction(cmd.action, cmd.data);
+                    aiMsg = aiMsg.replace(jsonMatch[0], '').trim();
                 }
-
-                addChatMessage('ai', spokenText);
-                speakAlert(spokenText);
-
-            } catch (err) {
-                console.error("API Error", err);
-                addChatMessage('ai', "I'm having trouble connecting to the network right now.");
-                speakAlert("I'm having trouble connecting to the network right now.");
+                addChatMessage('ai', aiMsg);
+                speakAlert(aiMsg);
+            } catch (e) {
+                addChatMessage('ai', "Master link disrupted. Please check API key.");
             }
         } else {
-            // Simulated Fallback Logic
-            let response = "I couldn't understand that command.";
-            let lowerText = text.toLowerCase();
+            // MOCK LOGIC
+            let response = "Master Intelligence processing request...";
+            let lower = text.toLowerCase();
 
-            if (lowerText.includes('heart rate') || lowerText.includes('hr')) {
-                // naive parsing for demo
-                const num = lowerText.match(/\d+/);
+            if (lower.includes('heart rate') || lower.includes('hr')) {
+                const num = lower.match(/\d+/);
                 if (num) {
-                    store.updatePlayerMetrics(selectedPlayer.id, { hr: parseInt(num[0]) });
-                    response = `I have updated ${selectedPlayer.name}'s heart rate to ${num[0]} bpm.`;
-                } else {
-                    response = `${selectedPlayer.name}'s current heart rate is ${selectedPlayer.hr} bpm.`;
+                    executeAction('UPDATE_METRIC', { playerId: selectedPlayer.id, metric: 'hr', value: parseInt(num[0]) });
+                    response = `Synchronizing ${selectedPlayer.name}'s biometric heart rate to ${num[0]} bpm.`;
                 }
-            } else if (lowerText.includes('recovery')) {
-                response = `${selectedPlayer.name}'s recovery is at ${selectedPlayer.recovery}%.`;
-            } else if (lowerText.includes('highlight') || lowerText.includes('show me')) {
-                if (lowerText.includes('chest') || lowerText.includes('heart')) {
-                    store.setHighlightedPart('chest');
-                    setTimeout(() => store.setHighlightedPart(null), 5000);
-                    response = "Highlighting the chest area on the digital twin.";
-                } else if (lowerText.includes('leg') || lowerText.includes('legs')) {
-                    store.setHighlightedPart('legs');
-                    setTimeout(() => store.setHighlightedPart(null), 5000);
-                    response = "Highlighting the lower extremities.";
-                }
+            } else if (lower.includes('dash') || lower.includes('streak') || lower.includes('view') || lower.includes('admin')) {
+                let target = lower.includes('streak') ? 'streak' : lower.includes('admin') ? 'admin' : 'viewer';
+                executeAction('CHANGE_VIEW', { view: target });
+                response = `Reconfiguring interface to ${target} module.`;
+            } else if (lower.includes('highlight') || lower.includes('show')) {
+                let part = lower.includes('chest') || lower.includes('heart') ? 'chest' : 'legs';
+                executeAction('HIGHLIGHT_PART', { part });
+                response = `Probing ${part} data nodes on digital twin.`;
             } else {
-                response = "I heard you, but I need an API key to process complex queries. I can currently handle basic heart rate and highlight commands.";
+                response = "I am the FairPlay Intelligence. Ask me to change views, update Subject biometrics, or probe the 3D model.";
             }
 
-            // Simulate network delay
             setTimeout(() => {
                 addChatMessage('ai', response);
                 speakAlert(response);
                 setIsProcessing(false);
-            }, 1000);
-            return; // exit early for fake delay
+            }, 800);
+            return;
         }
-
         setIsProcessing(false);
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-4 pointer-events-none">
-
-            {/* Optional Chat Panel */}
-            <AnimatePresence>
-                {showChat && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                        className="w-80 h-96 bg-[#0B1320]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col pointer-events-auto overflow-hidden"
-                    >
-                        <div className="bg-[#111827] p-3 border-b border-white/10 flex items-center gap-2">
-                            <Brain className="text-[#00E5FF]" size={18} />
-                            <h3 className="text-white text-sm font-bold tracking-widest">TWIN COACH</h3>
-                        </div>
-                        <div className="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col">
-                            {chatHistory.length === 0 ? (
-                                <p className="text-gray-500 text-xs text-center m-auto">Try saying "What is the selected player's recovery?" or "Highlight the chest".</p>
-                            ) : (
-                                chatHistory.map((msg, i) => (
-                                    <div key={i} className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'self-end' : 'self-start'}`}>
-                                        <div className={`px-3 py-2 rounded-xl text-sm ${msg.role === 'user'
-                                            ? 'bg-[#FF4D00] text-white rounded-tr-sm'
-                                            : 'bg-white/10 text-gray-200 border border-white/5 rounded-tl-sm'
-                                            }`}>
-                                            {msg.content}
-                                        </div>
-                                        <span className={`text-[10px] text-gray-600 mt-1 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>{msg.time}</span>
-                                    </div>
-                                ))
-                            )}
-                            {isProcessing && (
-                                <div className="self-start px-3 py-2 rounded-xl bg-white/5 border border-white/5 flex gap-1 items-center">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-bounce" style={{ animationDelay: '0ms' }} />
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-bounce" style={{ animationDelay: '150ms' }} />
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-bounce" style={{ animationDelay: '300ms' }} />
-                                </div>
-                            )}
-                        </div>
-                        {error && (
-                            <div className="bg-red-500/20 text-red-400 text-xs p-2 text-center border-t border-red-500/30">
-                                {error}
-                            </div>
-                        )}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* AI Control Button */}
-            <div className="pointer-events-auto flex items-center gap-3">
+        <>
+            {/* Activation Button */}
+            <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end gap-3">
                 <AnimatePresence>
                     {(isListening || isProcessing) && (
-                        <motion.div
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 20 }}
-                            className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2"
-                        >
-                            <Volume2 className="text-[#00E5FF] animate-pulse" size={16} />
-                            <span className="text-xs text-[#00E5FF] font-mono uppercase tracking-widest leading-none">
-                                {isListening ? 'Listening...' : 'Processing...'}
-                            </span>
+                        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+                            className="bg-[#00F0FF]/10 backdrop-blur-md border border-[#00F0FF]/30 px-4 py-2 rounded-full mb-2 flex items-center gap-2">
+                            <motion.div animate={{ height: [4, 12, 4] }} transition={{ repeat: Infinity, duration: 0.5 }} className="w-1 bg-[#00F0FF]" />
+                            <motion.div animate={{ height: [8, 4, 8] }} transition={{ repeat: Infinity, duration: 0.5, delay: 0.1 }} className="w-1 bg-[#00F0FF]" />
+                            <motion.div animate={{ height: [4, 12, 4] }} transition={{ repeat: Infinity, duration: 0.5, delay: 0.2 }} className="w-1 bg-[#00F0FF]" />
+                            <span className="text-[10px] text-[#00F0FF] font-black tracking-widest uppercase">Syncing...</span>
                         </motion.div>
                     )}
                 </AnimatePresence>
 
-                <div className="relative">
-                    {/* Ripple Effect Background when listening */}
-                    {isListening && (
-                        <span className="absolute inset-0 bg-[#FF4D00] rounded-full animate-ping opacity-30"></span>
-                    )}
-                    <button
-                        onClick={toggleListen}
-                        onContextMenu={(e) => { e.preventDefault(); setShowChat(!showChat); }}
-                        className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 z-10 relative 
-                            ${isListening ? 'bg-[#FF4D00] shadow-[0_0_30px_rgba(255,77,0,0.6)] scale-110' : 'bg-[#0B1320] border border-white/20 hover:border-[#00E5FF]/50 hover:bg-[#111827]'}`}
-                        title="Click to speak. Right-click for chat log."
-                    >
-                        {isListening ? (
-                            <MicOff className="text-white" size={24} />
-                        ) : (
-                            <Mic className="text-[#00E5FF]" size={24} />
-                        )}
-                    </button>
-                    {/* Small avatar indicator */}
-                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-[#00E5FF] rounded-full flex items-center justify-center border-2 border-black">
-                        <Brain size={12} className="text-black" />
-                    </div>
-                </div>
+                <button onClick={toggleListen} onContextMenu={(e) => { e.preventDefault(); setShowSidebar(!showSidebar); }}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(0,240,255,0.2)] transition-all duration-500 relative
+                        ${isListening ? 'bg-[#FF4D00] shadow-[0_0_40px_rgba(255,77,0,0.5)] scale-110' : 'bg-[#0A0F1E] border border-[#00F0FF]/30 hover:border-[#00F0FF] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)]'}`}>
+                    <AnimatePresence mode="wait">
+                        {isListening ? <MicOff key="off" className="text-white" size={28} /> : <Brain key="on" className="text-[#00F0FF]" size={28} />}
+                    </AnimatePresence>
+                    {isListening && <motion.div layoutId="flare" className="absolute inset-0 rounded-full border-2 border-white/50" animate={{ scale: [1, 1.4], opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 1 }} />}
+                </button>
             </div>
 
-        </div>
+            {/* Master Intelligence Sidebar */}
+            <AnimatePresence>
+                {showSidebar && (
+                    <>
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSidebar(false)}
+                            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] pointer-events-auto" />
+
+                        <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="fixed top-0 right-0 w-full md:w-[400px] h-full bg-[#070B14]/90 backdrop-blur-2xl border-l border-white/10 z-[80] shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col pointer-events-auto">
+
+                            {/* Header */}
+                            <div className="p-6 border-b border-white/10 bg-slate-950/50 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-[#00F0FF]/10 flex items-center justify-center border border-[#00F0FF]/30">
+                                        <Brain className="text-[#00F0FF]" size={20} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-white font-bold tracking-tighter text-lg leading-none">MASTER <span className="text-[#00F0FF]">INTEL</span></h2>
+                                        <p className="text-[10px] text-gray-500 font-mono tracking-widest uppercase mt-1 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Platform Link Active
+                                        </p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowSidebar(false)} className="text-gray-500 hover:text-white transition-colors">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            {/* Chat Area */}
+                            <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+                                {chatHistory.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-40">
+                                        <Database size={48} className="text-[#00F0FF]" />
+                                        <p className="text-xs max-w-[200px] leading-relaxed">System ready. Command me to analyze biometrics, reconfigure views, or initialize roster players.</p>
+                                    </div>
+                                ) : (
+                                    chatHistory.map((msg, i) => (
+                                        <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                            <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
+                                                    ? 'bg-[#FF4D00] text-white rounded-tr-none shadow-[0_10px_20px_rgba(255,77,0,0.2)]'
+                                                    : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-none'
+                                                }`}>
+                                                {msg.content}
+                                            </div>
+                                            <span className="text-[9px] text-gray-600 mt-2 font-mono">{msg.time}</span>
+                                        </motion.div>
+                                    ))
+                                )}
+
+                                {isProcessing && (
+                                    <div className="flex items-center gap-1 px-4 py-3 bg-white/5 rounded-2xl w-fit">
+                                        <span className="w-1 h-1 bg-[#00F0FF] rounded-full animate-bounce" />
+                                        <span className="w-1 h-1 bg-[#00F0FF] rounded-full animate-bounce delay-75" />
+                                        <span className="w-1 h-1 bg-[#00F0FF] rounded-full animate-bounce delay-150" />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Quick Actions */}
+                            <div className="px-6 py-4 border-t border-white/10 bg-black/20 flex gap-2 overflow-x-auto scrollbar-hide">
+                                <button onClick={() => handleVoiceCommand("Switch to Streak Dashboard")} className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-[10px] text-gray-400 hover:text-white transition-all">
+                                    <Layout size={12} /> STREAKS
+                                </button>
+                                <button onClick={() => handleVoiceCommand("Show me the Admin Panel")} className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-[10px] text-gray-400 hover:text-white transition-all">
+                                    <Shield size={12} /> ADMIN
+                                </button>
+                                <button onClick={() => handleVoiceCommand("Highlight the chest area")} className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-[10px] text-gray-400 hover:text-white transition-all">
+                                    <Activity size={12} /> PROBE CHEST
+                                </button>
+                            </div>
+
+                            {/* Footer Input */}
+                            <div className="p-6 bg-slate-950/80 border-t border-white/10">
+                                <div className="relative group">
+                                    <input
+                                        type="text"
+                                        placeholder="Speak or type command..."
+                                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-4 pr-12 text-sm focus:outline-none focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF] transition-all group-hover:border-white/20"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && e.target.value) {
+                                                handleVoiceCommand(e.target.value);
+                                                e.target.value = '';
+                                            }
+                                        }}
+                                    />
+                                    <button onClick={toggleListen} className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-white/10 text-gray-500 hover:text-[#00F0FF] transition-colors">
+                                        <Mic size={20} />
+                                    </button>
+                                </div>
+                                <p className="text-[9px] text-center text-gray-600 mt-4 tracking-tighter uppercase font-mono">End-to-End Encrypted // Biometric Link Stable</p>
+                            </div>
+
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+        </>
     );
 }

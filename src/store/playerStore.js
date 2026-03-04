@@ -16,7 +16,9 @@ const usePlayerStore = create((set) => ({
     ],
     selectedPlayerId: '#0042',
     highlightedPart: null,
+    view: 'vitality',
 
+    setView: (view) => set({ view }),
     setSelectedPlayerId: (id) => set({ selectedPlayerId: id, highlightedPart: null }),
     setHighlightedPart: (part) => set({ highlightedPart: part }),
 

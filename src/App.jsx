@@ -8,8 +8,11 @@ import StreakDashboard from './components/StreakDashboard';
 import AICoach from './components/AICoach';
 import { Layers, Monitor, Activity, ShieldCheck, Dumbbell, Flame } from 'lucide-react';
 
+import usePlayerStore from './store/playerStore';
+
 function App() {
-    const [view, setView] = useState('vitality');
+    const view = usePlayerStore((state) => state.view);
+    const setView = usePlayerStore((state) => state.setView);
 
     return (
         <div className="min-h-screen bg-[#070b14]">
