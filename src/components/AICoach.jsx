@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Brain, Volume2, X, ChevronRight, Activity, Shield, Layout, UserPlus, Database } from 'lucide-react';
+import { Mic, MicOff, Brain, Volume2, VolumeX, X, ChevronRight, Activity, Shield, Layout, UserPlus, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import usePlayerStore, { speakAlert } from '../store/playerStore';
 
@@ -8,6 +8,7 @@ const OPENAI_API_KEY = '';
 export default function AICoach() {
     const [isListening, setIsListening] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
     const [showSidebar, setShowSidebar] = useState(false);
     const [chatHistory, setChatHistory] = useState([]);
     const [error, setError] = useState('');
@@ -127,7 +128,7 @@ If a command is detected, output the JSON block and a short confirmation.
                     aiMsg = aiMsg.replace(jsonMatch[0], '').trim();
                 }
                 addChatMessage('ai', aiMsg);
-                speakAlert(aiMsg);
+                if (!isMuted) speakAlert(aiMsg);
             } catch (e) {
                 addChatMessage('ai', "Master link disrupted. Please check API key.");
             }
@@ -165,7 +166,7 @@ If a command is detected, output the JSON block and a short confirmation.
 
             setTimeout(() => {
                 addChatMessage('ai', response);
-                speakAlert(response);
+                if (!isMuted) speakAlert(response);
                 setIsProcessing(false);
             }, 800);
             return;
@@ -222,7 +223,11 @@ If a command is detected, output the JSON block and a short confirmation.
                                         </p>
                                     </div>
                                 </div>
-                                <button onClick={() => setShowSidebar(false)} className="text-gray-500 hover:text-white transition-colors">
+                                <button onClick={() => setShowSidebar(false)} className="text-gray-500 hover:text-white transition-colors flex items-center gap-4">
+                                    <button onClick={(e) => { e.stopPropagation(); setIsMuted(!isMuted); if (!isMuted) window.speechSynthesis.cancel(); }}
+                                        className={`p-2 rounded-lg transition-all ${isMuted ? 'text-red-500 bg-red-500/10' : 'text-[#00F0FF] hover:bg-white/10'}`}>
+                                        {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                                    </button>
                                     <X size={24} />
                                 </button>
                             </div>
