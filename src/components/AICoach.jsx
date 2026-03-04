@@ -82,23 +82,33 @@ export default function AICoach() {
         addChatMessage('user', text);
 
         const store = usePlayerStore.getState();
-        const selectedPlayer = store.players.find(p => p.id === store.selectedPlayerId) || store.players[0];
+        const roster = store.players;
+        const selectedPlayer = roster.find(p => p.id === store.selectedPlayerId) || roster[0];
 
         if (OPENAI_API_KEY) {
             try {
+                const rosterContext = roster.map(p =>
+                    `Subject ID: ${p.id}, Name: ${p.name}, HR: ${p.hr}, Recovery: ${p.recovery}%, Agility: ${p.agility}/100, Speed: ${p.topSpeed}km/h`
+                ).join('\n');
+
                 const systemPrompt = `
 You are the FairPlay Master Intelligence. You are the nervous system of the FairPlay platform.
 KNOWLEDGE BASE:
 - PURPOSE: FairPlay is a high-performance Command Center for athlete analytics.
-- MODULES: 'Streak Dashboard' (consistency), 'Admin Panel' (metrics input), '3D Biometric Viewer' (real-time visualization).
-- DATA: Active subject is ${selectedPlayer.name} (ID: ${selectedPlayer.id}) with HR ${selectedPlayer.hr}, Recovery ${selectedPlayer.recovery}%.
+- ROSTER DATA:
+${rosterContext}
+
+INSTRUCTIONS:
+- If an ID is provided (e.g., #0001), retrieve the exact subject data immediately.
+- For ability analysis, summarize 'Agility', 'Balance', and 'Speed' (e.g., "Subject #0001 is an Agility specialist").
+- Be a high-level sports scientist. Use terms like 'biometric efficiency' and 'neural readiness'.
 
 REACTION TOOLS (JSON ONLY):
 {"action": "CHANGE_VIEW", "data": {"view": "admin" | "viewer" | "streak"}}
-{"action": "ADD_PLAYER", "data": {"name": "...", "hr": 80, "recovery": 100}}
+{"action": "SELECT_PLAYER", "data": {"playerId": "#0001"}}
 {"action": "HIGHLIGHT_PART", "data": {"part": "chest" | "legs"}}
 
-If a command is detected, output the JSON block and a short confirmation. If it's a question, answer with Master Intelligence authority.
+If a command is detected, output the JSON block and a short confirmation.
 `;
                 const response = await fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
@@ -122,26 +132,35 @@ If a command is detected, output the JSON block and a short confirmation. If it'
                 addChatMessage('ai', "Master link disrupted. Please check API key.");
             }
         } else {
-            // MOCK LOGIC
-            let response = "Master Intelligence processing request...";
+            // MOCK LOGIC (Upgraded for Data Awareness)
+            let response = "I am the FairPlay Intelligence. Ask me for data on a specific ID (e.g., #0001), change views, or probe the 3D model.";
             let lower = text.toLowerCase();
 
-            if (lower.includes('heart rate') || lower.includes('hr')) {
+            // Search for Player ID in text
+            const idMatch = text.match(/#\d{4}/);
+            const foundPlayer = idMatch ? roster.find(p => p.id === idMatch[0]) : null;
+
+            if (foundPlayer) {
+                const abilityFocus = foundPlayer.agility > 80 ? "an Agility-focused specialist" : "a balanced physical subject";
+                response = `Retrieving Subject ${foundPlayer.id} (${foundPlayer.name}). 
+                           Current Abilities: ${abilityFocus} with a Top Speed of ${foundPlayer.topSpeed}km/h and ${foundPlayer.agility}/100 Agility rating.
+                           Biometric Status: Heart rate is stable at ${foundPlayer.hr} BPM, and Recovery is at ${foundPlayer.recovery}%. 
+                           I have initialized the digital twin for subject ${foundPlayer.name}.`;
+                executeAction('SELECT_PLAYER', { playerId: foundPlayer.id });
+            } else if (lower.includes('heart rate') || lower.includes('hr')) {
                 const num = lower.match(/\d+/);
                 if (num) {
                     executeAction('UPDATE_METRIC', { playerId: selectedPlayer.id, metric: 'hr', value: parseInt(num[0]) });
-                    response = `Synchronizing ${selectedPlayer.name}'s biometric heart rate to ${num[0]} bpm.`;
+                    response = `Synchronizing ${selectedPlayer.name}'s biometric heart rate to ${num[0]} bpm. Neural readiness adjusted.`;
                 }
             } else if (lower.includes('dash') || lower.includes('streak') || lower.includes('view') || lower.includes('admin')) {
                 let target = lower.includes('streak') ? 'streak' : lower.includes('admin') ? 'admin' : 'viewer';
                 executeAction('CHANGE_VIEW', { view: target });
-                response = `Reconfiguring interface to ${target} module.`;
+                response = `Reconfiguring interface to ${target} module. Link established.`;
             } else if (lower.includes('highlight') || lower.includes('show')) {
                 let part = lower.includes('chest') || lower.includes('heart') ? 'chest' : 'legs';
                 executeAction('HIGHLIGHT_PART', { part });
-                response = `Probing ${part} data nodes on digital twin.`;
-            } else {
-                response = "I am the FairPlay Intelligence. Ask me to change views, update Subject biometrics, or probe the 3D model.";
+                response = `Probing ${part} data nodes on digital twin. Visualizing biometric sensors now.`;
             }
 
             setTimeout(() => {
@@ -220,8 +239,8 @@ If a command is detected, output the JSON block and a short confirmation. If it'
                                         <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                                             className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                             <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
-                                                    ? 'bg-[#FF4D00] text-white rounded-tr-none shadow-[0_10px_20px_rgba(255,77,0,0.2)]'
-                                                    : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-none'
+                                                ? 'bg-[#FF4D00] text-white rounded-tr-none shadow-[0_10px_20px_rgba(255,77,0,0.2)]'
+                                                : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-none'
                                                 }`}>
                                                 {msg.content}
                                             </div>
